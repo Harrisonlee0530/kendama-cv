@@ -3,6 +3,7 @@
 
 import { PoseEstimator }   from './pipeline/pose.js';
 import { KenTamaTracker }  from './pipeline/tracker.js';
+import { ObjectDetector }  from './pipeline/detector.js';
 import { FeatureExtractor } from './pipeline/features.js';
 import { LSTMClassifier }  from './pipeline/lstm.js';
 import { Recorder }        from './capture/recorder.js';
@@ -19,8 +20,10 @@ const trickName   = document.getElementById('trick-name');
 const trickConf   = document.getElementById('trick-conf');
 const confBars    = document.getElementById('confidence-bars');
 const histList    = document.getElementById('history-list');
-const modelFile   = document.getElementById('model-file');
-const modelStatus = document.getElementById('model-status');
+const modelFile    = document.getElementById('model-file');
+const modelStatus  = document.getElementById('model-status');
+const detectorFile = document.getElementById('detector-file');
+const detectorStatus = document.getElementById('detector-status');
 const kenArrow    = document.getElementById('ken-arrow');
 const tamaDot     = document.getElementById('tama-dot').querySelector('::before') ?? document.getElementById('tama-dot');
 const startRec    = document.getElementById('start-record');
@@ -38,6 +41,7 @@ const clearHist   = document.getElementById('clear-history');
 // ── Pipeline instances ──
 const pose      = new PoseEstimator();
 const tracker   = new KenTamaTracker();
+const detector  = new ObjectDetector();
 const extractor = new FeatureExtractor();
 const lstm      = new LSTMClassifier();
 const recorder  = new Recorder(pose, tracker, extractor);
@@ -274,6 +278,23 @@ function renderClipList() {
 function setupEventListeners() {
   // Nav
   navBtns.forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
+
+  // Detector model load
+  detectorFile.addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    detectorStatus.textContent = 'Loading…';
+    detectorStatus.className = '';
+    try {
+      await detector.loadFromFile(file);
+      detectorStatus.textContent = `✓ ${file.name}`;
+      detectorStatus.className = 'loaded';
+    } catch (err) {
+      detectorStatus.textContent = 'Failed to load detector';
+      detectorStatus.className = 'error';
+      console.error(err);
+    }
+  });
 
   // Model load
   modelFile.addEventListener('change', async e => {

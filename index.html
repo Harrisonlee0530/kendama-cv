@@ -86,9 +86,17 @@
 
           <!-- Model load -->
           <div id="model-section">
-            <h3>Model</h3>
+            <h3>LSTM Model</h3>
             <input type="file" id="model-file" accept=".onnx" />
             <span id="model-status">No model loaded</span>
+          </div>
+
+          <!-- Detector model load -->
+          <div id="detector-section">
+            <h3>Detector Model</h3>
+            <input type="file" id="detector-file" accept=".onnx" />
+            <span id="detector-status">No detector loaded — using HSV fallback</span>
+            <p class="calib-hint">Load detector.onnx to enable YOLOv8 ken/tama detection.</p>
           </div>
         </div>
       </section>

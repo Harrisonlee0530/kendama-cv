@@ -131,29 +131,68 @@ These angles capture the shape of the throw/catch motion independent of where th
 
 ---
 
-### Stage 3 — Ken & Tama Tracking (`pipeline/tracker.js`)
+### Stage 3 — Ken & Tama Detection (`pipeline/detector.js` + `pipeline/tracker.js`)
 
-**Technology:** HSV color segmentation + PCA line fitting, running on every frame via an off-screen canvas.
+Ken and tama localization uses two methods depending on what models are loaded. Both expose the same 6-element feature sub-vector so the rest of the pipeline is unaffected.
 
-Because MediaPipe only tracks the human body, the ken (stick) and tama (ball) must be tracked separately using color.
-
-**How it works:**
-
-1. The frame is read into a pixel buffer via `getImageData`.
-2. Every pixel is converted from RGB to HSV. HSV is used rather than RGB because it separates color identity (hue) from lighting conditions (value), making it far more robust under varying light.
-3. Pixels within the calibrated HSV range for the ken are collected as a point cloud. Same for the tama.
-4. **Ken shape** — a PCA line fit is run on the ken point cloud. The covariance matrix's principal eigenvector gives the orientation axis. Projecting points onto this axis gives the length. Result: `{ cx, cy, angle, length }`.
-5. **Tama shape** — the tama point cloud centroid gives position. Result: `{ cx, cy }`.
-
-**Calibration** works in two ways:
-- **Color picker** — sets the HSV range symmetrically around the picked hex color.
-- **Pixel sampling** — click directly on the object in the live feed; the exact pixel's HSV is used as the center of the range.
-
-The tracker exposes a 6-element feature sub-vector:
 ```
 [ kenAngle_norm, kenLength_norm, tamaRelX, tamaRelY, tamaDist_norm, tamaAngle_norm ]
 ```
-where tama position is expressed relative to the ken centre, capturing the spatial relationship that distinguishes most tricks (e.g. tama above vs below ken, close vs far).
+
+Tama position is always expressed relative to the ken centre — this relative geometry is what distinguishes most tricks (tama above vs below ken, close vs far, orbiting vs stationary).
+
+---
+
+#### Method A — YOLOv8 Object Detector (`detector.js`) — preferred
+
+**Technology:** YOLOv8-nano fine-tuned on two classes (`ken`, `tama`), exported to ONNX, running in-browser via ONNX Runtime Web.
+
+The detector is active when `detector.onnx` is loaded. Each frame goes through a full detection pipeline:
+
+**Pre-processing**
+The video frame is drawn to a 640×640 off-screen canvas and read into a `Float32Array` in CHW layout (channels-first), normalised to `[0, 1]`. This matches the input format YOLOv8 expects.
+
+**Inference**
+The tensor `[1, 3, 640, 640]` is passed to the ONNX session. YOLOv8-nano's output is shaped `[1, 6, 8400]` — 8400 anchor candidates, each with `(cx, cy, w, h, conf_ken, conf_tama)`.
+
+**Post-processing**
+1. Filter candidates below `CONF_THRESH` (0.35).
+2. For each candidate, pick the highest-confidence class.
+3. Run per-class **Non-Maximum Suppression** (NMS, IoU threshold 0.45) to eliminate duplicate boxes.
+4. Take the top-1 detection per class.
+
+**Ken orientation from bounding box**
+YOLOv8 provides axis-aligned bounding boxes, not rotated ones. Ken orientation is derived from the box aspect ratio: a tall narrow box → ken is near-vertical (~90°); a wide short box → ken is near-horizontal (~0°). The longer dimension is used as the length estimate.
+
+For more precise angle estimation in a future iteration, a segmentation head or keypoint model could replace this heuristic.
+
+**Training the detector** — see `train/train_detector.py`:
+```bash
+# Create dataset folder structure
+python train/train_detector.py scaffold
+
+# Fine-tune from YOLOv8-nano pretrained weights
+python train/train_detector.py train --data data/detector/dataset.yaml --out models/detector.onnx
+```
+
+Label images using LabelImg or Roboflow with two classes: `ken` (0) and `tama` (1). Aim for 200+ images per class across varied lighting, backgrounds, and ken/tama colors.
+
+---
+
+#### Method B — HSV Color Tracker (`tracker.js`) — fallback
+
+Used automatically when no detector model is loaded. Labels are unaffected; the feature vector format is identical.
+
+**How it works:**
+1. Each frame is read into a pixel buffer via `getImageData`.
+2. Every pixel is converted from RGB to HSV. HSV separates color identity (hue) from lighting conditions (value), making segmentation more robust under varying light than raw RGB.
+3. Pixels within the calibrated HSV range for the ken are collected as a point cloud; same for the tama.
+4. **Ken shape** — PCA line fitting on the ken point cloud. The covariance matrix's principal eigenvector gives the orientation axis; projecting points onto it gives length. Result: `{ cx, cy, angle, length }`.
+5. **Tama shape** — centroid of the tama point cloud. Result: `{ cx, cy }`.
+
+**Calibration:**
+- **Color picker** — sets the HSV range symmetrically around the selected hex color.
+- **Pixel sampling** — click Sample then click directly on the object in the video feed; the pixel's HSV becomes the range center.
 
 ---
 
