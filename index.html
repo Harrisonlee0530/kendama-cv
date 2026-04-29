@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kendama CV</title>
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- MediaPipe Pose -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+
+  <!-- ONNX Runtime Web -->
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+</head>
+<body>
+
+  <div id="app">
+
+    <!-- ── Sidebar ── -->
+    <aside id="sidebar">
+      <div id="logo">
+        <span class="logo-icon">⬡</span>
+        <span>KendamaCV</span>
+      </div>
+
+      <nav>
+        <button class="nav-btn active" data-view="inference">▶ Live</button>
+        <button class="nav-btn" data-view="capture">⏺ Capture</button>
+        <button class="nav-btn" data-view="about">ℹ About</button>
+      </nav>
+
+      <!-- Trick history log -->
+      <div id="history-panel">
+        <h3>Trick Log</h3>
+        <ul id="history-list"></ul>
+        <button id="clear-history">Clear</button>
+      </div>
+    </aside>
+
+    <!-- ── Main ── -->
+    <main id="main">
+
+      <!-- INFERENCE VIEW -->
+      <section id="view-inference" class="view active">
+        <div id="canvas-container">
+          <video id="input-video" playsinline></video>
+          <canvas id="output-canvas"></canvas>
+
+          <!-- Ken/Tama overlays -->
+          <div id="ken-indicator">
+            <div id="ken-arrow-wrap">
+              <div id="ken-arrow">↑</div>
+            </div>
+            <span>Ken</span>
+          </div>
+          <div id="tama-indicator">
+            <div id="tama-dot"></div>
+            <span>Tama</span>
+          </div>
+        </div>
+
+        <!-- Prediction panel -->
+        <div id="prediction-panel">
+          <div id="current-trick">
+            <span id="trick-name">–</span>
+            <span id="trick-conf">0%</span>
+          </div>
+          <div id="confidence-bars"></div>
+
+          <!-- Calibration -->
+          <div id="calibration-section">
+            <h3>Color Calibration</h3>
+            <div class="calib-row">
+              <label>Ken color</label>
+              <input type="color" id="ken-color" value="#8B4513" />
+              <button class="calib-btn" data-target="ken">Sample</button>
+            </div>
+            <div class="calib-row">
+              <label>Tama color</label>
+              <input type="color" id="tama-color" value="#FF0000" />
+              <button class="calib-btn" data-target="tama">Sample</button>
+            </div>
+            <p class="calib-hint">Click Sample then click on the object in the feed.</p>
+          </div>
+
+          <!-- Model load -->
+          <div id="model-section">
+            <h3>Model</h3>
+            <input type="file" id="model-file" accept=".onnx" />
+            <span id="model-status">No model loaded</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- CAPTURE VIEW -->
+      <section id="view-capture" class="view">
+        <div id="capture-layout">
+          <div id="capture-canvas-wrap">
+            <video id="capture-video" playsinline></video>
+            <canvas id="capture-canvas"></canvas>
+          </div>
+          <div id="capture-controls">
+            <h2>Data Collection</h2>
+
+            <div class="ctrl-group">
+              <label>Trick label</label>
+              <select id="trick-label">
+                <option value="spike">Spike</option>
+                <option value="big_cup">Big Cup</option>
+                <option value="lighthouse">Lighthouse</option>
+                <option value="around_japan">Around Japan</option>
+                <option value="airplane">Airplane</option>
+                <option value="bird">Bird</option>
+              </select>
+            </div>
+
+            <div class="ctrl-group">
+              <label>Source</label>
+              <div class="radio-row">
+                <label><input type="radio" name="src" value="webcam" checked /> Webcam</label>
+                <label><input type="radio" name="src" value="file" /> Video file</label>
+              </div>
+            </div>
+
+            <div id="file-input-wrap" class="ctrl-group hidden">
+              <label>Video file</label>
+              <input type="file" id="video-file" accept="video/*" />
+            </div>
+
+            <div class="ctrl-group">
+              <label>Clip duration (sec)</label>
+              <input type="number" id="clip-duration" value="3" min="1" max="10" />
+            </div>
+
+            <button id="start-record" class="primary-btn">⏺ Start Recording</button>
+            <button id="stop-record" class="primary-btn" disabled>⏹ Stop</button>
+
+            <div id="capture-status"></div>
+
+            <hr />
+            <h3>Saved Clips</h3>
+            <div id="clip-list"></div>
+            <button id="export-dataset">⬇ Export dataset.json</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ABOUT VIEW -->
+      <section id="view-about" class="view">
+        <div id="about-content">
+          <h2>KendamaCV</h2>
+          <p>Real-time kendama trick recognition using pose estimation and temporal modeling.</p>
+
+          <h3>Pipeline</h3>
+          <div class="pipeline-diagram">
+            <div class="pipe-step">📷<br/>Camera</div>
+            <div class="pipe-arrow">→</div>
+            <div class="pipe-step">🦴<br/>MediaPipe<br/>Pose</div>
+            <div class="pipe-arrow">→</div>
+            <div class="pipe-step">📐<br/>Feature<br/>Extraction</div>
+            <div class="pipe-arrow">→</div>
+            <div class="pipe-step">🧠<br/>LSTM</div>
+            <div class="pipe-arrow">→</div>
+            <div class="pipe-step">🏷<br/>Trick<br/>Class</div>
+          </div>
+
+          <h3>Features per frame</h3>
+          <ul>
+            <li>33 MediaPipe pose landmarks (x, y, visibility)</li>
+            <li>Key joint angles (wrists, elbows, shoulders)</li>
+            <li>Ken orientation angle (degrees from vertical)</li>
+            <li>Tama position relative to ken tip/base</li>
+          </ul>
+
+          <h3>Tricks</h3>
+          <ul>
+            <li><strong>Spike</strong> — tama lands on ken spike</li>
+            <li><strong>Big Cup</strong> — tama lands in large cup</li>
+            <li><strong>Lighthouse</strong> — ken balances on tama</li>
+            <li><strong>Around Japan</strong> — tama orbits ken full rotation</li>
+            <li><strong>Airplane</strong> — tama swings to spike via hole</li>
+            <li><strong>Bird</strong> — balance trick with string taut</li>
+          </ul>
+
+          <h3>Training (offline)</h3>
+          <pre>pip install torch numpy pandas scikit-learn
+python train/trainer.py --data data/dataset.json --out models/kendama.onnx</pre>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
