@@ -4,9 +4,10 @@
 import { FEATURE_DIM } from '../pipeline/labels.js';
 
 export class Recorder {
-  constructor(poseEstimator, tracker, extractor) {
+  constructor(poseEstimator, tracker, extractor, detector = null) {
     this.pose      = poseEstimator;
     this.tracker   = tracker;
+    this.detector  = detector;
     this.extractor = extractor;
 
     this.isRecording = false;
@@ -42,10 +43,14 @@ export class Recorder {
   }
 
   // Feed one frame's data — call each animation frame while recording
-  feedFrame(poseLandmarks, jointAngles, kenTamaVec, w, h) {
+  feedFrame(poseLandmarks, jointAngles, w, h) {
     if (!this.isRecording || !this._current) return;
-    const vec = this.extractor.extract(poseLandmarks, jointAngles, kenTamaVec, w, h);
-    this._current.frames.push(Array.from(vec)); // store as plain array for JSON
+    // Prefer detector over HSV tracker if available
+    const ktVec = (this.detector?.loaded)
+      ? this.detector.featureVector(w, h)
+      : this.tracker.featureVector(w, h);
+    const vec = this.extractor.extract(poseLandmarks, jointAngles, ktVec, w, h);
+    this._current.frames.push(Array.from(vec));
   }
 
   // Process a video file — runs pose + tracking on every frame
@@ -66,14 +71,21 @@ export class Recorder {
       };
 
       video.onseeked = async () => {
-        // Send current frame to pose
         await this.pose.send(video);
 
         const poseResults = this.pose.lastResults;
         const landmarks   = poseResults?.poseLandmarks ?? null;
         const angles      = this.pose.extractJointAngles(landmarks);
-        this.tracker.track(video);
-        const ktVec = this.tracker.featureVector(video.videoWidth, video.videoHeight);
+
+        // Prefer detector over HSV tracker
+        let ktVec;
+        if (this.detector?.loaded) {
+          await this.detector.detect(video);
+          ktVec = this.detector.featureVector(video.videoWidth, video.videoHeight);
+        } else {
+          this.tracker.track(video);
+          ktVec = this.tracker.featureVector(video.videoWidth, video.videoHeight);
+        }
 
         const vec = this.extractor.extract(landmarks, angles, ktVec, video.videoWidth, video.videoHeight);
         clip.frames.push(Array.from(vec));

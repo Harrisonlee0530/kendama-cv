@@ -166,19 +166,31 @@
             <div class="pipe-arrow">→</div>
             <div class="pipe-step">🦴<br/>MediaPipe<br/>Pose</div>
             <div class="pipe-arrow">→</div>
+            <div class="pipe-step">🎯<br/>YOLOv8<br/>Detector</div>
+            <div class="pipe-arrow">→</div>
             <div class="pipe-step">📐<br/>Feature<br/>Extraction</div>
             <div class="pipe-arrow">→</div>
             <div class="pipe-step">🧠<br/>LSTM</div>
             <div class="pipe-arrow">→</div>
             <div class="pipe-step">🏷<br/>Trick<br/>Class</div>
           </div>
+          <p style="font-size:12px;color:var(--muted);margin-top:-8px;">
+            If no detector model is loaded, HSV color tracking is used as a fallback.
+          </p>
 
           <h3>Features per frame</h3>
           <ul>
             <li>33 MediaPipe pose landmarks (x, y, visibility)</li>
             <li>Key joint angles (wrists, elbows, shoulders)</li>
-            <li>Ken orientation angle (degrees from vertical)</li>
-            <li>Tama position relative to ken tip/base</li>
+            <li>Ken bounding box — orientation angle, length (YOLOv8 or HSV PCA)</li>
+            <li>Tama bounding box — position relative to ken centre (YOLOv8 or HSV centroid)</li>
+            <li>Tama–ken euclidean distance and angle</li>
+          </ul>
+
+          <h3>Detection</h3>
+          <ul>
+            <li><strong>YOLOv8-nano</strong> — preferred; load <code>detector.onnx</code> in the Live tab</li>
+            <li><strong>HSV tracker</strong> — fallback; calibrate ken/tama colors in the Live tab</li>
           </ul>
 
           <h3>Tricks</h3>

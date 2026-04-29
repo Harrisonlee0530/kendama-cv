@@ -44,7 +44,7 @@ const tracker   = new KenTamaTracker();
 const detector  = new ObjectDetector();
 const extractor = new FeatureExtractor();
 const lstm      = new LSTMClassifier();
-const recorder  = new Recorder(pose, tracker, extractor);
+const recorder  = new Recorder(pose, tracker, extractor, detector);
 
 // ── State ──
 let inferStream   = null;
@@ -179,8 +179,8 @@ function runCaptureLoop() {
       if (recorder.isRecording) {
         const lm     = results?.poseLandmarks ?? null;
         const angles = pose.extractJointAngles(lm);
-        const ktVec  = tracker.featureVector(capCanvas.width, capCanvas.height);
-        recorder.feedFrame(lm, angles, ktVec, capCanvas.width, capCanvas.height);
+        // detector.track / tracker.track already called above in the render path
+        recorder.feedFrame(lm, angles, capCanvas.width, capCanvas.height);
 
         // Blink border
         capCanvas.style.outline = (Math.floor(Date.now() / 500) % 2 === 0)
